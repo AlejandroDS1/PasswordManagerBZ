@@ -1,6 +1,14 @@
 # VsCode files
 .vscode
 
- 
- # PyVenv
+# environment
+.env
+
+# ddb
+PswdMG
+
+# PyVenv
 .python-version
+
+#__pycache
+__pycache__

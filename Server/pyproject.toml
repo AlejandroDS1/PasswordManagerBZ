@@ -7,6 +7,9 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
+cryptography = "^42.0.8"
+sqlmodel = "^0.0.19"
+flask = "^3.0.3"
 
 
 [build-system]

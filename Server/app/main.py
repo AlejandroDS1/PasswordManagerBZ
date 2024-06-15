@@ -1,42 +1,40 @@
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization, hashes
+""" API with FLASK"""
+from flask import Flask, request, jsonify
+from app.models.db import db
+from app.models.user import User, create_user
+from sqlmodel import select
 
-# Generar clave privada del servidor
-server_private_key = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=4096
-)
+app = Flask(__name__)
 
-# Clave publica a compartir.
-server_public_key = server_private_key.public_key()
+@app.route("/login")
+def login():
+    
+    users = db.exec(select(User)).all()
+
+    jsonUsers = [user.toDict() for user in users]
+
+    return {"Users": jsonUsers}
 
 
-# Test init socket
-import socket
+@app.route("/register", methods=["POST"])
+def register():
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    data = request.json
 
-    s.bind(('127.0.0.1', 65432))
+    # If no data has been sent, return Bad Request
+    if not data:
+        return {"msj" : "No Data"}, 400
 
-    s.listen(1)
+    # Check if all the fields are filled
+    if "email" not in data or \
+       "username" not in data or \
+       "password" not in data or \
+       "public_key" not in data:
+        return {"msj" : "There is a field missing, fields must be [email, username, password, public_key]."}
 
-    conn, addr = s.accept()
+    # Create user in data base
+    user = create_user(db, data)
 
-    conn.sendall(server_public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    ))
+    return {"user" : user.toDict()}    
 
-    mensaje = conn.recv(4096)
-
-    print(f"Mensaje encriptado {mensaje}")
-
-    decripted = server_private_key.decrypt(
-        mensaje,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-    ))
-
-    print(f"desencripted: {decripted}")
+    # TODO Finalmente devuelve un token entre otras cosas -> https://flask.palletsprojects.com/en/3.0.x/quickstart/#sessions
