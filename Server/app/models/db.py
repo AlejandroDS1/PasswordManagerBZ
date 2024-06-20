@@ -18,4 +18,4 @@ def get_db() -> Generator[Session, None, None]:
     with Session(engine) as en:
         yield en
 
-db = Annotated[Session(engine), get_db]
+db : Session = Annotated[Session(engine), get_db]

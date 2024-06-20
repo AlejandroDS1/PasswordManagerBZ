@@ -5,10 +5,17 @@
 .env
 
 # ddb
-PswdMG
+*.db
+
+# TDOO maybe change
+create_database
 
 # PyVenv
 .python-version
 
 #__pycache
 __pycache__
+
+# TSL certificate
+cert.pem
+key.pem

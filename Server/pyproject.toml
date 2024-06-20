@@ -10,7 +10,12 @@ python = "^3.11"
 cryptography = "^42.0.8"
 sqlmodel = "^0.0.19"
 flask = "^3.0.3"
+requests = "^2.32.3"
+pyopenssl = "^24.1.0"
 
+
+[tool.poetry.group.dev.dependencies]
+psswdmanagerencryption = {path = "../PsswdManagerEncryption/dist/psswdmanagerencryption-0.1.0-py3-none-any.whl", develop = true}
 
 [build-system]
 requires = ["poetry-core"]
