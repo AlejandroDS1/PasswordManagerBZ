@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "psswdmanagerencryption"
+version = "0.1.0"
+description = "PasswordManagerBZ Encryption module to encrypt comunications server-client, using asymetric encryption."
+authors = ["AlejandroDS1 <acantelo7@alumnes.ub.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
