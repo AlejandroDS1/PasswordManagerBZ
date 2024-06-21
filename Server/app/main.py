@@ -6,6 +6,7 @@ from flask import (
     jsonify,
     session
 )
+from app.models.passwords import PasswordCreate
 from app.models.db import db
 from app.models.user import User, create_user, ErrorCode_DATA
 from app.config import get_env_file
@@ -13,7 +14,9 @@ from app.config import get_env_file
 from sqlmodel import select
 
 from secrets import token_hex # Generate random token
-from psswdmanagerencryption.encryptionManager import get_public_key_pem, decrypt #, setkeys
+#from psswdmanagerencryption.encryptionManager import get_public_key_pem, decrypt #, setkeys
+
+from app.encryption.encryptionManager import *
 
 app = Flask(__name__)
 app.secret_key = token_hex()
@@ -22,42 +25,27 @@ app.secret_key = token_hex()
 
 @app.route("/login")
 def login():
-    
+    # TODO: Maybe implementar session
     users = db.exec(select(User)).all()
 
     jsonUsers = [user.toDict() for user in users]
 
-    return {"Users": jsonUsers}
-
+    return {"Users": jsonUsers, "msj" : "Dummy Method"}
 
 @app.route("/register", methods=["POST"])
 def register():
-
-    try:    
-        print(f"[DATA : ] {str(request.data)}")
-    except: print("[DATA failed]")
-
+    
     # If no data has been sent, return Bad Request
-    if not request.data:
-        return {"msj" : "No Data"}, 400
+    if not request.json:
+        return {"msj" : "json not recived, json must include the following fields [email, username, password]."}, 400
 
-    data = decrypt(request.data)
-
-    # Process data to parse json
-    data = data.replace("'", r'"').replace("\\\\", "\\")
-
-    print(f"El mensaje es:  {data}")
-
-    data = json.loads(data)
-
-    print(f"password:  {data['password']}")
+    data = request.json
 
     # Check if all the fields are filled
     if "email" not in data or \
        "username" not in data or \
-       "password" not in data or \
-       "public_key" not in data:
-        return {"msj" : "There is a field missing, fields must be [email, username, password, public_key]."}
+       "password" not in data:
+        return {"msj" : "There is a field missing, fields must be [email, username, password, public_key]."}, 400
 
     # Create user in data base
     user = create_user(db, data)
@@ -65,37 +53,95 @@ def register():
     # TODO mejorar codigo de estado o mensaje personalizado
     if not isinstance(user, User): return {"msj": user.value}, 400 # If object is not created send err msj
 
-    return {"user" : user.toDict(), "msj" : "User created succesfully"}, 200
+    return {"user" : user.toDict(), "msj" : f"User created succesfully [Username : {user.name}] |  [Email: {user.email}]"}, 200
 
     # TODO Finalmente devuelve un token entre otras cosas -> https://flask.palletsprojects.com/en/3.0.x/quickstart/#sessions
 
+@app.route("/password/get", methods=["GET", "POST"])
+def getPasswords():
+    '''
+    Returns the selected passwords to the users.
+    TODO
+    For Client porpuses, will be posible to select by id.
+    Normal user probably is going to select by title
+    '''
 
-@app.route("/public_key", methods=["POST"])
-def share_keys():
+    # TODO: GET method only for sessions.
+    # At the moment shows all
+    if request.method == "GET":
+        user : User = db.exec(select(User)).one()[0]
+
+        passwords = db.exec(select(Password).where(Password.user_id == user.id))
+
+        allPswd = []
+
+        for i in passwords:
+            i : Password = i[0]
+            iD = i.toDict()
+
+            iD["password"] = decrypt_password(i.nonce, i.encrypted_password, user.hashed_password)
+            allPswd.append(str(iD))
+
+        return jsonify({"User" : user.name, "Passwords" : str(allPswd)})
     
-    """
-    With this methods, Server will send its public key to user
+    # POST method will require autentication, meaning email and password
 
-    This is the only method who is not encrypted.
-    """
+    if not request.json: return {"msj" : "User not autenticated!"}, 400
 
-    session['username'] = "Alejandro"
-    print(f"session {str(session)}, username: {session['username']}")
-    
-    print(f"json = {request.data}")
+    auth = request.json
 
-    return "Working"
-    #return jsonify({"public_key" : get_public_key_pem()})
+    if "email" not in auth or "password" not in auth: return {"msj": "Field missing, fields must be [email, password]"}, 400
 
-@app.route("/a", methods=["GET"])
-def a():
-    
-    print(f"session: {str(session)}")
+    user : User = db.exec(select(User).where(User.email == auth["email"])).one()[0]
 
-    if 'username' in session:
-        return f"Logged + {session['username']} + \n Key = {app.secret_key}"
-        
-    return "Not logged !!"
+    if not check_password(auth["password"], user.hashed_password, user.salt): return {"msj" : "Password incorrect"}, 400
 
-# if __name__ == "__main__":
-#      app.run(host='0.0.0.0', port=443, ssl_context=('../cert.pem', '../key.pem'))
+    passwords = db.exec(select(Password).where(Password.user_id == user.id))
+
+    allPswd = []
+
+    for i in passwords:
+        i : Password = i[0]
+        iD = i.toDict()
+
+        iD["password"] = decrypt_password(i.nonce, i.encrypted_password, user.hashed_password)
+        allPswd.append(str(iD))
+
+    return jsonify({"User" : user.name, "Passwords" : str(allPswd)})
+
+@app.route("/password/create", methods=["POST"])
+def create_password():
+
+    '''
+    TODO Create extense json data to recive
+    {
+        password:{
+            password: str "password to encrypt and store"
+            title : str | None "Tile of the password"
+            website : str | None  "Website of the password"
+        }
+
+        user : {
+            email : str "Email that belongs to the user"
+            master_password: str "master_password of users account"
+        }
+    }
+    '''
+    if not request.json: return {"msj" : "No content recived, data must be format json and must include [password], optionals: [title, website]"}, 400
+
+    data = request.json
+
+    if "password" not in data: return {"msj" : "Json must include password field"}, 400
+
+    # TODO extends json....
+    if "email" not in data or "master_password" not in data: return {"msj" : "user credentials needed"}, 400
+
+    # Check optional parameters
+    if "title" not in data: data["title"] = None
+    if "website" not in data: data["website"] = None
+
+    user = db.exec(select(User).where(User.email == data["email"])).one()[0]
+
+    encrypt_password(password=PasswordCreate(password=data["password"], title=data["title"], website=data["website"]), user=user)
+
+    return {"msj" : "Password stored succesfully!"}
